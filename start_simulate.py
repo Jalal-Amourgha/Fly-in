@@ -160,7 +160,7 @@ class Start_Simulation():
         self._create_drones()
         self._find_all_paths()
         paths_length = len(self.paths)
-        # paths_length = paths_length if paths_length <= 4 else 4
+        paths_length = paths_length if paths_length <= 4 else 4
 
         # print(self.paths)
 
