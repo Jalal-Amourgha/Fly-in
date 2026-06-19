@@ -26,6 +26,7 @@ class Start_Simulation():
         self.nb_drones: int = nb_drones
         self.Zones: dict = {}
         self.Drones: list[Drone] = []
+        self.Links: list[dict] = {}
         self.paths: list = []
         self.start_hub: Zone
         self.end_hub: Zone
@@ -144,6 +145,23 @@ class Start_Simulation():
                 f'-{len(self.Zones[zone_name].current_drones)}' +
                 f'{RESET}', end=' ')
 
+    def _create_link_capacity(self):
+        self.Links = {}
+        for path in self.paths:
+            new_path = [self.start_hub.name] + path['path']
+            for i in range(len(new_path)-1):
+                src, dst = new_path[i], new_path[i+1]
+                self.Links[f'{src}-{dst}'] = {
+                    'curr': 0,
+                    'max': self._get_capacity_link(src, dst)}
+
+    def _get_capacity_link(self, src: str, dst: str) -> int:
+        for edge in self.data[src]['edges']:
+            if (edge['to'] == dst):
+                return (edge['max_link_capacity'])
+
+        return (0)
+
     def let_drone_fly(self) -> None:
         """
         The main function that's runs everything
@@ -161,8 +179,10 @@ class Start_Simulation():
         self._find_all_paths()
         paths_length = len(self.paths)
         paths_length = paths_length if paths_length <= 4 else 4
+        self._create_link_capacity()
 
-        # print(self.paths)
+        if not (self.paths):
+            sys.exit("[ERROR]: There's no path between start and end zone!")
 
         history = SimHistory()
 
@@ -179,30 +199,43 @@ class Start_Simulation():
 
             for drone in self.Drones:
                 if drone.current_zone == self.end_hub.name:
+                    drone_path = self.paths[drone.id % paths_length]['path']
+                    last_src = drone_path[drone.pos-2]
+                    last_dst = drone_path[drone.pos-1]
+                    self.Links[f'{last_src}-{last_dst}']['curr'] -= 1
                     continue
 
                 if drone.skip_next:
                     drone.skip_next = False
                     dest_name = drone.transit_dest
 
-                    # dest_zone = self.Zones[dest_name]
-                    # dest_zone.current_drones.append(drone.id)
-
                     drone.current_zone = dest_name
                     output += f"D{drone.id}-{dest_name} "
                     self._print_log(drone.id, dest_name)
                     continue
 
-                if (drone.pos >= len(
-                        self.paths[drone.id % paths_length]['path'])):
+                drone_path = self.paths[drone.id % paths_length]['path']
+
+                if (drone.pos >= len(drone_path)):
                     continue
 
                 curr_zone = self.Zones[drone.current_zone]
-                drone_path = self.paths[drone.id % paths_length]['path']
+                curr_name = curr_zone.name
                 next_name = drone_path[drone.pos]
                 next_zone = self.Zones[next_name]
 
+                link_key = f'{curr_name}-{next_name}'
+                if self.Links[link_key]['curr'] >= self.Links[link_key]['max']:
+                    continue
+
                 if (len(next_zone.current_drones) < next_zone.max_capacity):
+                    self.Links[link_key]['curr'] += 1
+
+                    if (drone.pos > 0):
+                        new_path = [self.start_hub.name] + drone_path
+                        old_zone_name = new_path[drone.pos-1]
+                        self.Links[f'{old_zone_name}-{curr_name}']['curr'] -= 1
+
                     drone.pos += 1
 
                     if next_zone.zone == 'restricted':
@@ -219,7 +252,6 @@ class Start_Simulation():
                         output += f"D{drone.id}-{conn} "
 
                         self._print_log(drone.id, next_name)
-                        # drone.pos += 1
                         continue
                     else:
                         curr_zone.current_drones.remove(drone.id)

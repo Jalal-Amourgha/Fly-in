@@ -9,7 +9,6 @@ class Zone():
             color: str,
             max_capacity: int,
             edges: list[dict],
-            current_drones: list = [],
             ) -> None:
         """
         Initialize Zone needed attributes
